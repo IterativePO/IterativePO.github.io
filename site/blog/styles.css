@@ -36,7 +36,11 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-padding-top: 24px; }
+html {
+  scroll-padding-top: 24px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 body {
   margin: 0;
   background: #fff;
@@ -65,6 +69,29 @@ sup, sub { line-height: 0; }
 .skip-link { position: absolute; top: 8px; left: 16px; padding: 8px 12px; background: #fff; transform: translateY(-160%); }
 .skip-link:focus { transform: none; }
 
+/* MathJax responsive & iOS Safari guardrails */
+mjx-container {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+mjx-container[display="true"] {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.35em 0 !important;
+}
+mjx-container:not([display="true"]) {
+  max-width: 100%;
+}
+.math-nowrap {
+  white-space: nowrap;
+}
+.math-nowrap mjx-break {
+  display: none !important;
+}
+
 .article-header { padding-bottom: 28px; margin-bottom: 34px; border-bottom: 1px solid var(--line-soft); }
 h1 { font-size: clamp(32px, 4.3vw, 44px); line-height: 1.18; letter-spacing: -1.4px; font-weight: 650; margin: 0 0 22px; }
 h1 span { display: block; font-size: 0.7em; line-height: 1.35; font-weight: 450; letter-spacing: -0.6px; margin-top: 7px; color: #3b434c; }
@@ -92,7 +119,15 @@ figcaption { font-size: 14px; line-height: 1.6; color: var(--muted); margin-top:
   .paper-figure figcaption { max-width: 836px; margin-left: auto; margin-right: auto; }
 }
 
-/* Conceptual SVG Diagrams in Overview (clean, muted textbook line art) */
+/* Responsive horizontal scroll container for wide diagrams on narrow screens */
+.svg-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Conceptual SVG Diagrams in Overview (pure native SVG, zero foreignObject) */
 .concept-figure {
   padding: 6px 0 2px;
 }
@@ -110,164 +145,20 @@ figcaption { font-size: 14px; line-height: 1.6; color: var(--muted); margin-top:
 .c-line { fill: none; stroke: #495057; stroke-width: 1.35; }
 .c-line-Sim { fill: none; stroke: #8c5a53; stroke-width: 1.35; stroke-dasharray: 2.5 2.5; }
 
-/* ForeignObject Flexbox Helpers (shared across Overview diagrams & #fig) */
-foreignObject { overflow: visible; }
-.fo-center {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--ink);
-  line-height: 1.25;
-  gap: 4px;
-}
-.fo-center-col {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  line-height: 1.25;
-  gap: 2px;
-}
-.fo-col-left {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  text-align: left;
-  line-height: 1.3;
-  gap: 2px;
-}
-.fo-col-right {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  text-align: right;
-  line-height: 1.3;
-  gap: 2px;
-}
-.fo-row-title { font-size: 13.5px; font-weight: 620; color: var(--ink); }
-.fo-row-sub { font-size: 12px; color: var(--muted); line-height: 1.3; }
-.fo-note-muted { font-size: 12.5px; color: var(--muted); font-style: italic; }
-.fo-sim-ink { color: #7a4640; font-weight: 550; font-size: 13px; }
-.fo-sim-caption { font-size: 12px; color: #7a4640; }
-.fo-edge-label {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 500;
-  color: #3b434c;
-}
-.fo-edge-sub {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.fo-math-lg { font-size: 16.5px; color: var(--ink); }
-.fo-sb-label { font-size: 13px; font-weight: 500; color: var(--ink); }
-.fo-pi-chain { font-size: 14.5px; color: var(--ink); }
-.fo-encap-title {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 550;
-  color: #82551f;
-}
-.fo-encap-sub {
-  font-size: 11.5px;
-  color: #82551f;
-  font-style: italic;
-}
-.fo-encap-ink {
-  color: #784b17;
-  font-weight: 550;
-}
-.fo-pi-bl { color: #285e8e; }
-.fo-pi-or { color: #a66212; }
-.fo-ipi-bl { font-size: 13px; font-weight: 600; color: #285e8e; }
-.fo-ipi-or { font-size: 13px; font-weight: 600; color: #a66212; }
-.fo-ipi-tag-bl { font-size: 11px; font-weight: 600; color: #285e8e; }
-.fo-ipi-tag-or { font-size: 11px; font-weight: 600; color: #a66212; }
-.fo-ipi-node-bl { font-size: 12px; font-weight: 550; color: #285e8e; }
-.fo-ipi-node-or { font-size: 12px; font-weight: 550; color: #a66212; }
-.fo-pill-bg {
-  background: rgba(255, 255, 255, 0.9);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
-/* Figure 1 (#fig) ForeignObject Label Classes */
-.fo-panel-head {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 16px;
-  color: #1f2428;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-.fo-fig-or {
-  font-size: 24px;
-  font-weight: 500;
-  color: var(--or-ink);
-}
-.fo-fig-bl {
-  font-size: 25px;
-  font-weight: 500;
-  color: var(--bl-ink);
-}
-.fo-fig-bl-sm {
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--bl-ink);
-}
-.fo-fig-bl-sub {
-  font-size: 14.5px;
-  color: var(--bl-ink);
-  margin-top: 2px;
-}
-.fo-cone-note {
-  font-size: 15px;
-  line-height: 1.38;
-  color: #1f2428;
-}
-.fo-token-note {
-  font-size: 12.5px;
-  color: #1f2428;
-}
-.fo-tok-sq {
-  color: var(--tok);
-  margin: 0 2px;
-}
-.fo-rep-title {
-  font-size: 15.5px;
-  color: #1f2428;
-}
-.fo-rep-math {
-  font-size: 17.5px;
-  color: var(--bl-ink);
-  margin-top: 2px;
-}
+/* Native SVG Typography Classes (shared across Overview diagrams) */
+.svg-row-title { font-size: 13.5px; font-weight: 600; fill: var(--ink); }
+.svg-row-sub { font-size: 12px; font-weight: 400; fill: var(--muted); }
+.svg-note-muted { font-size: 12.5px; font-style: italic; fill: var(--muted); }
+.svg-node-text { font-size: 13.5px; font-weight: 500; fill: var(--ink); }
+.svg-sim-ink { font-size: 13px; font-weight: 500; fill: #7a4640; }
+.svg-edge-label { font-size: 12px; font-weight: 500; fill: #3b434c; }
+.svg-edge-sub { font-size: 11.5px; font-weight: 400; fill: var(--muted); }
+.svg-sb-label { font-size: 13px; font-weight: 500; fill: var(--ink); }
+.svg-encap-sub { font-size: 11.5px; font-style: italic; fill: #82551f; }
+.svg-ipi-bl { font-size: 13px; font-weight: 600; fill: #285e8e; }
+.svg-ipi-or { font-size: 13px; font-weight: 600; fill: #a66212; }
+.svg-ipi-tag-bl { font-size: 11px; font-weight: 600; fill: #285e8e; }
+.svg-ipi-tag-or { font-size: 11px; font-weight: 600; fill: #a66212; }
 
 /* Figure 1 Inline SVG Diagram (GIF-like loop) */
 #fig {
@@ -314,7 +205,15 @@ foreignObject { overflow: visible; }
 #fig .slot.hot { stroke: var(--or-node); stroke-width: 1.6; stroke-dasharray: none; }
 #fig .qchip { fill: var(--or-fill); stroke: var(--or-stroke); stroke-width: 1; }
 
-.equation { margin: 22px 0; padding: 6px 8px; overflow-x: auto; font-size: 18px; }
+.equation {
+  margin: 22px 0;
+  padding: 6px 4px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  font-size: 18px;
+}
 
 /* Bertsekas-style Uniformly Shaded Theorem Box (LaTeX \theoremstyle{plain}) */
 .observation-box {
@@ -430,6 +329,7 @@ foreignObject { overflow: visible; }
   padding: 1px 5px;
   background: var(--surface);
   border: 1px solid var(--line-soft);
+  overflow-wrap: anywhere;
 }
 .dialogue-turn.terminal > span {
   color: var(--green);
@@ -455,6 +355,7 @@ foreignObject { overflow: visible; }
   max-width: 100%;
   margin: 0 auto;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-top: 2px solid var(--ink);
   border-bottom: 2px solid var(--ink);
 }
@@ -493,7 +394,7 @@ foreignObject { overflow: visible; }
 }
 .results-table .best-val { font-weight: 700; color: var(--ink); }
 
-pre { overflow-x: auto; margin: 0 0 17px; padding: 18px; background: #f6f7f8; border: 1px solid var(--line-soft); font-size: 12px; line-height: 1.65; tab-size: 2; }
+pre { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 0 17px; padding: 18px; background: #f6f7f8; border: 1px solid var(--line-soft); font-size: 12px; line-height: 1.65; tab-size: 2; }
 code { font-family: var(--mono); }
 footer { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 45px; color: var(--muted); font-size: 12px; }
 footer a { color: var(--muted); text-decoration: none; }
@@ -505,6 +406,34 @@ footer a { color: var(--muted); text-decoration: none; }
   .environment-grid { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 680px) {
+  .svg-scroll-wrap::after {
+    content: "Swipe diagram \2192";
+    display: block;
+    text-align: right;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--muted);
+    margin-top: 5px;
+    letter-spacing: 0.01em;
+  }
+  .svg-scroll {
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    padding: 8px 10px 6px;
+    background:
+      linear-gradient(to right, #fff 28%, rgba(255, 255, 255, 0)),
+      linear-gradient(to left, #fff 28%, rgba(255, 255, 255, 0)) 100% 0,
+      radial-gradient(farthest-side at 0 50%, rgba(36, 42, 48, 0.13), rgba(36, 42, 48, 0)),
+      radial-gradient(farthest-side at 100% 50%, rgba(36, 42, 48, 0.15), rgba(36, 42, 48, 0)) 100% 0;
+    background-repeat: no-repeat;
+    background-size: 28px 100%, 28px 100%, 12px 100%, 12px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .concept-svg { min-width: 640px; }
+  #fig { min-width: 820px; }
+}
+
 @media (max-width: 520px) {
   body { font-size: 16px; line-height: 1.7; }
   main { padding: 32px 21px 24px; }
@@ -514,7 +443,11 @@ footer a { color: var(--muted); text-decoration: none; }
   .article-header { margin-bottom: 25px; }
   .authors { font-size: 14px; }
   .affiliations { font-size: 12px; }
-  .equation { font-size: 16px; padding: 10px 0; }
+  .equation { font-size: 15.5px; padding: 6px 0; }
+  .observation-box { padding: 14px 14px 16px; }
+  .observation-box p { font-size: 15.5px; }
+  .observation-eq { font-size: 15px; padding: 2px 0; }
+  .dialogue-turn { grid-template-columns: 1fr; gap: 3px; }
   figcaption { font-size: 13px; }
   footer { gap: 5px; }
 }
@@ -527,6 +460,8 @@ footer a { color: var(--muted); text-decoration: none; }
   h2 { font-size: 16pt; break-after: avoid; }
   figure, .equation { break-inside: avoid; }
   .paper-figure { width: 100%; margin-left: 0; }
+  .svg-scroll { overflow: visible; }
+  .concept-svg, #fig { min-width: 0; }
   details > * { display: block; }
   pre { overflow: visible; }
   a { color: inherit; }
