@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Iterative Policy Optimization (IterPO) performs batch-online multi-turn RL with single-turn RLHF tools by fitting a turn-level Q-function to logged conversations and optimizing it with single-turn GRPO.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Iterative Policy Optimization: Batch-Online Multi-Turn RL via Single-Turn RL">
+  <meta property="og:description" content="Batch-online multi-turn RL using only single-turn RLHF tools, without an interactive environment or user simulator inside the training loop.">
+  <meta property="og:url" content="https://iterativepo.github.io/blog/">
+  <meta property="og:image" content="https://iterativepo.github.io/blog/assets/igrpo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>Iterative Policy Optimization: Batch-Online Multi-Turn RL via Single-Turn RL</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=6">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      chtml: {
+        scale: 0.98
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+      }
+    };
+  </script>
+  <script src="script.js?v=4" defer></script>
+  <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <main id="main">
+    <article>
+      <header class="article-header">
+        <h1>Iterative Policy Optimization<span>Batch-Online Multi-Turn RL via Single-Turn RL</span></h1>
+        <p class="authors">Daniel R. Jiang<sup>*</sup>, Ankur Samanta<sup>*</sup>, Yukai Yang,<br class="author-break"> Jalaj Bhandari, Rémi Munos, Tyler Lu</p>
+        <p class="affiliations">Meta · FAIR at Meta · Columbia University <span class="contribution"><sup>*</sup>Equal contribution</span></p>
+        <nav class="resources" aria-label="Research resources">
+          <a href="https://arxiv.org/abs/2511.21638">Paper</a>
+          <a href="https://github.com/IterativeGRPO/IterativeGRPO">Code</a>
+          <a href="#citation">BibTeX</a>
+        </nav>
+      </header>
+
+      <section aria-labelledby="overview">
+        <h2 id="overview">Overview</h2>
+        <ul class="overview-list">
+          <li>On-policy multi-turn RL requires <em>an external environment to respond</em> after every agent turn. Real users cannot be queried during training, and faithful user simulators are hard to build for bespoke conversational tasks.</li>
+          <li>Production conversational agents instead operate in a <em>batch-online</em> regime, where the deployed policy $\pi_k$ logs a batch of conversations $\mathcal{D}_k$ and is retrained offline before redeployment.</li>
+          <li>This cycle corresponds directly to <em>approximate policy iteration</em>, which alternates between estimating the state-action value function $Q^\pi$ (policy evaluation) and updating the policy to optimize $Q^\pi$ (policy improvement).</li>
+          <li><a href="https://arxiv.org/abs/2511.21638">Iterative Policy Optimization</a> (IterPO) carries out both steps with <em>off-the-shelf single-turn RLHF tools</em>. In each round, IterPO fits a turn-level $Q$-function $Q^\pi$ to Monte Carlo returns via supervised reward modeling and then runs single-turn, token-level GRPO with $Q^\pi$ as the reward model. Neither step requires a user simulator or temporal-difference learning.</li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="rollout-bottleneck">
+        <h2 id="rollout-bottleneck">On-Policy Multi-Turn RL Requires a Simulator</h2>
+        <p>Many conversational agents are built to drive outcomes that are observed only after a multi-turn interaction ends, so optimizing those outcomes is a long-horizon credit-assignment problem. Standard multi-turn RL methods extend on-policy optimizers such as GRPO or PPO to full $T$-turn trajectories $(s_1, a_1, s_2, a_2, \dots, s_T, a_T)$, where $s_t$ is the conversation state at turn $t$ and $a_t$ is the agent’s response. In single-turn RL, the policy samples a complete response on its own. In multi-turn RL, an external environment must supply the next state $s_{t+1} \sim P(\cdot \mid s_t, a_t)$ after every response $a_t$. Executable environments can fill this role for coding and web agents during training, whereas conversational agents must rely on a user simulator that is hard to build and validate.</p>
+
+        <figure class="paper-figure concept-figure" aria-labelledby="rollout-issue-caption">
+          <svg class="concept-svg" viewBox="0 0 860 198" role="img" aria-labelledby="rollout-issue-caption">
+            <defs>
+              <marker id="c-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#495057"/>
+              </marker>
+              <marker id="c-ah-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#8c5a53"/>
+              </marker>
+            </defs>
+
+            <!-- Row 1: Single-turn RL -->
+            <foreignObject x="8" y="18" width="176" height="54">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <div class="fo-row-title">Single-turn RL</div>
+                <div class="fo-row-sub">Self-contained rollout</div>
+              </div>
+            </foreignObject>
+
+            <foreignObject x="196" y="26" width="36" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$s_1$</div>
+            </foreignObject>
+            <line x1="234" y1="44" x2="274" y2="44" class="c-line" marker-end="url(#c-ah)"/>
+
+            <rect x="276" y="25" width="76" height="38" rx="4" class="c-node"/>
+            <foreignObject x="276" y="25" width="76" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">Policy $\pi$</div>
+            </foreignObject>
+
+            <line x1="352" y1="44" x2="416" y2="44" class="c-line" marker-end="url(#c-ah)"/>
+            <foreignObject x="352" y="18" width="64" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">$a_1$</div>
+            </foreignObject>
+
+            <rect x="418" y="25" width="148" height="38" rx="4" class="c-node-soft"/>
+            <foreignObject x="418" y="25" width="148" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center"><span>Reward $R(s_1, a_1)$</span></div>
+            </foreignObject>
+
+            <foreignObject x="584" y="25" width="268" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <span class="fo-note-muted">No external environment needed during training</span>
+              </div>
+            </foreignObject>
+
+            <!-- Row 2: On-policy Multi-turn RL -->
+            <foreignObject x="8" y="108" width="176" height="58">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <div class="fo-row-title">On-policy multi-turn RL</div>
+                <div class="fo-row-sub">Full-trajectory rollout</div>
+              </div>
+            </foreignObject>
+
+            <foreignObject x="196" y="116" width="36" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$s_1$</div>
+            </foreignObject>
+            <line x1="234" y1="134" x2="274" y2="134" class="c-line" marker-end="url(#c-ah)"/>
+
+            <rect x="276" y="115" width="76" height="38" rx="4" class="c-node"/>
+            <foreignObject x="276" y="115" width="76" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">Policy $\pi$</div>
+            </foreignObject>
+
+            <line x1="352" y1="134" x2="394" y2="134" class="c-line-Sim" marker-end="url(#c-ah-muted)"/>
+            <foreignObject x="352" y="108" width="42" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">$a_1$</div>
+            </foreignObject>
+
+            <rect x="396" y="115" width="108" height="38" rx="4" class="c-node-sim"/>
+            <foreignObject x="396" y="115" width="108" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sim-ink">User</div>
+            </foreignObject>
+
+            <line x1="504" y1="134" x2="546" y2="134" class="c-line-Sim" marker-end="url(#c-ah-muted)"/>
+            <foreignObject x="504" y="108" width="42" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">$s_2$</div>
+            </foreignObject>
+
+            <rect x="548" y="115" width="76" height="38" rx="4" class="c-node"/>
+            <foreignObject x="548" y="115" width="76" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">Policy $\pi$</div>
+            </foreignObject>
+
+            <line x1="624" y1="134" x2="666" y2="134" class="c-line-Sim" marker-end="url(#c-ah-muted)"/>
+            <foreignObject x="624" y="108" width="42" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">$a_2$</div>
+            </foreignObject>
+
+            <rect x="668" y="115" width="108" height="38" rx="4" class="c-node-sim"/>
+            <foreignObject x="668" y="115" width="108" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sim-ink">User</div>
+            </foreignObject>
+
+            <line x1="776" y1="134" x2="812" y2="134" class="c-line" marker-end="url(#c-ah)"/>
+            <foreignObject x="814" y="116" width="42" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\cdots R$</div>
+            </foreignObject>
+
+            <foreignObject x="396" y="160" width="380" height="28">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sim-caption">
+                $s_{t+1} \sim P(\cdot \mid s_t, a_t)$ (requires a user or simulator at every turn)
+              </div>
+            </foreignObject>
+          </svg>
+          <figcaption id="rollout-issue-caption"><span class="figure-number">Single-turn vs. on-policy multi-turn rollouts.</span> A single-turn policy generates a complete response $a_1$ from $s_1$ without external interaction. On-policy multi-turn rollouts require an environment (user) transition $s_{t+1} \sim P(\cdot \mid s_t, a_t)$ after each turn, so training cannot run without a user simulator.</figcaption>
+        </figure>
+      </section>
+
+      <section aria-labelledby="batch-online">
+        <h2 id="batch-online">Batch-Online Deployment</h2>
+        <p>Deployed conversational agents are typically updated in rounds rather than continuously. Over each deployment window (e.g., an A/B test lasting days or weeks), the current policy $\pi_k$ interacts with real users and logs a batch $\mathcal{D}_k$ of complete conversations with observed outcomes. The policy is then retrained offline on $\mathcal{D}_k$ to produce $\pi_{k+1}$ for the next deployment. This setting is <em>batch-online</em> because the data-generating policy changes between rounds, while each update is computed offline on a fixed dataset.</p>
+
+        <figure class="paper-figure concept-figure" aria-labelledby="batch-online-caption">
+          <svg class="concept-svg" viewBox="0 0 860 112" role="img" aria-labelledby="batch-online-caption">
+            <defs>
+              <marker id="bo-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#495057"/>
+              </marker>
+            </defs>
+
+            <!-- pi_0 -->
+            <rect x="24" y="24" width="84" height="40" rx="4" class="c-node"/>
+            <foreignObject x="24" y="24" width="84" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\pi_0$</div>
+            </foreignObject>
+            <foreignObject x="14" y="68" width="104" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-edge-sub">deploy</div>
+            </foreignObject>
+
+            <line x1="108" y1="44" x2="188" y2="44" class="c-line" marker-end="url(#bo-ah)"/>
+            <foreignObject x="108" y="18" width="80" height="22">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">collect</div>
+            </foreignObject>
+
+            <!-- D_0 -->
+            <rect x="190" y="24" width="96" height="40" rx="4" class="c-node-soft"/>
+            <foreignObject x="190" y="24" width="96" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\mathcal{D}_0$</div>
+            </foreignObject>
+            <foreignObject x="176" y="68" width="124" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-edge-sub">logged batch</div>
+            </foreignObject>
+
+            <line x1="286" y1="44" x2="366" y2="44" class="c-line" marker-end="url(#bo-ah)"/>
+            <foreignObject x="286" y="18" width="80" height="22">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">train</div>
+            </foreignObject>
+
+            <!-- pi_1 -->
+            <rect x="368" y="24" width="84" height="40" rx="4" class="c-node"/>
+            <foreignObject x="368" y="24" width="84" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\pi_1$</div>
+            </foreignObject>
+            <foreignObject x="358" y="68" width="104" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-edge-sub">deploy</div>
+            </foreignObject>
+
+            <line x1="452" y1="44" x2="532" y2="44" class="c-line" marker-end="url(#bo-ah)"/>
+            <foreignObject x="452" y="18" width="80" height="22">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">collect</div>
+            </foreignObject>
+
+            <!-- D_1 -->
+            <rect x="534" y="24" width="96" height="40" rx="4" class="c-node-soft"/>
+            <foreignObject x="534" y="24" width="96" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\mathcal{D}_1$</div>
+            </foreignObject>
+            <foreignObject x="520" y="68" width="124" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-edge-sub">logged batch</div>
+            </foreignObject>
+
+            <line x1="630" y1="44" x2="692" y2="44" class="c-line" marker-end="url(#bo-ah)"/>
+            <foreignObject x="630" y="18" width="62" height="22">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">train</div>
+            </foreignObject>
+
+            <foreignObject x="694" y="24" width="38" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\cdots$</div>
+            </foreignObject>
+
+            <line x1="732" y1="44" x2="774" y2="44" class="c-line" marker-end="url(#bo-ah)"/>
+
+            <!-- pi_K -->
+            <rect x="776" y="24" width="64" height="40" rx="4" class="c-node"/>
+            <foreignObject x="776" y="24" width="64" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\pi_K$</div>
+            </foreignObject>
+          </svg>
+          <figcaption id="batch-online-caption"><span class="figure-number">Batch-online deployment.</span> Production agents alternate between online data collection under the current policy $\pi_k$ and offline retraining on the logged trajectory batch $\mathcal{D}_k$.</figcaption>
+        </figure>
+      </section>
+
+      <section aria-labelledby="policy-iteration">
+        <h2 id="policy-iteration">Approximate Policy Iteration</h2>
+        <p>Alternating deployment with offline retraining has the same structure as classical <em>policy iteration</em> (<a href="http://incompleteideas.net/book/the-book-2nd.html">Sutton &amp; Barto, 2018</a>). In exact policy iteration, policy evaluation ($\text{E}$) computes the state-action value function $Q^\pi(s, a)$ of the current policy $\pi$, and policy improvement ($\text{I}$) updates $\pi$ to be greedy with respect to $Q^\pi$. By the policy improvement theorem, repeating these exact updates monotonically improves the policy and converges to $(\pi^*, Q^*)$. When the state or action space is too large for exact computation, approximating both steps gives <em>approximate policy iteration</em> (Bertsekas &amp; Tsitsiklis, 1996).</p>
+
+        <figure class="paper-figure concept-figure" aria-labelledby="sutton-barto-caption">
+          <svg class="concept-svg" viewBox="0 0 860 248" role="img" aria-labelledby="sutton-barto-caption">
+            <defs>
+              <marker id="sb-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#242a30"/>
+              </marker>
+            </defs>
+
+            <!-- Left: Sutton & Barto Circular Evaluation / Improvement Loop -->
+            <foreignObject x="160" y="14" width="60" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-math-lg">$\pi$</div>
+            </foreignObject>
+
+            <foreignObject x="160" y="150" width="60" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-math-lg">$Q^\pi$</div>
+            </foreignObject>
+
+            <!-- Right arc: evaluation -->
+            <path d="M 206,44 C 248,68 248,130 206,154" fill="none" stroke="#242a30" stroke-width="1.5" marker-end="url(#sb-ah)"/>
+            <foreignObject x="242" y="76" width="110" height="44">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <span class="fo-sb-label">evaluation</span>
+                <span class="fo-edge-sub">$Q \leftarrow Q^\pi$</span>
+              </div>
+            </foreignObject>
+
+            <!-- Left arc: improvement -->
+            <path d="M 174,154 C 132,130 132,68 174,44" fill="none" stroke="#242a30" stroke-width="1.5" marker-end="url(#sb-ah)"/>
+            <foreignObject x="24" y="76" width="112" height="44">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-right">
+                <span class="fo-sb-label">improvement</span>
+                <span class="fo-edge-sub">$\pi \leftarrow \text{greedy}(Q)$</span>
+              </div>
+            </foreignObject>
+
+            <!-- Subtle vertical divider -->
+            <line x1="376" y1="20" x2="376" y2="180" stroke="#e9ecef" stroke-width="1"/>
+
+            <!-- Right: Sutton & Barto Converging Lines -->
+            <!-- Upper line: (426, 36) to (766, 100) -->
+            <line x1="426" y1="36" x2="766" y2="100" stroke="#242a30" stroke-width="1.75"/>
+            <foreignObject x="490" y="12" width="170" height="28">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sb-label">$\pi = \text{greedy}(Q)$</div>
+            </foreignObject>
+
+            <!-- Lower line: (426, 168) to (766, 100) -->
+            <line x1="426" y1="168" x2="766" y2="100" stroke="#242a30" stroke-width="1.75"/>
+            <foreignObject x="490" y="158" width="150" height="28">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sb-label">$Q = Q^\pi$</div>
+            </foreignObject>
+
+            <!-- Zig-zag evaluation/improvement arrows between exact points on the two lines -->
+            <circle cx="453.2" cy="41.1" r="2.8" fill="#242a30"/>
+            <line x1="453.2" y1="41.1" x2="485.8" y2="151.0" stroke="#495057" stroke-width="1.35" marker-end="url(#sb-ah)"/>
+            <line x1="487.2" y1="155.8" x2="539.2" y2="62.0" stroke="#495057" stroke-width="1.35" marker-end="url(#sb-ah)"/>
+            <line x1="541.6" y1="57.8" x2="587.0" y2="131.8" stroke="#495057" stroke-width="1.35" marker-end="url(#sb-ah)"/>
+            <line x1="589.2" y1="135.4" x2="634.3" y2="79.5" stroke="#495057" stroke-width="1.35" marker-end="url(#sb-ah)"/>
+            <line x1="636.8" y1="75.7" x2="675.4" y2="114.2" stroke="#495057" stroke-width="1.35" marker-end="url(#sb-ah)"/>
+            <line x1="677.6" y1="117.7" x2="712.6" y2="93.0" stroke="#495057" stroke-width="1.35" marker-end="url(#sb-ah)"/>
+
+            <circle cx="766" cy="100" r="3.8" fill="#242a30"/>
+            <foreignObject x="772" y="84" width="64" height="32">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sb-label">$(\pi^*, Q^*)$</div>
+            </foreignObject>
+
+            <!-- Bottom: Unrolled Policy Iteration Sequence -->
+            <foreignObject x="20" y="202" width="820" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-pi-chain">
+                $\pi_0 \;\xrightarrow{\;\text{E}\;}\; Q^{\pi_0} \;\xrightarrow{\;\text{I}\;}\; \pi_1 \;\xrightarrow{\;\text{E}\;}\; Q^{\pi_1} \;\xrightarrow{\;\text{I}\;}\; \pi_2 \;\xrightarrow{\;\text{E}\;}\; \cdots \;\xrightarrow{\;\text{I}\;}\; \pi^* \;\xrightarrow{\;\text{E}\;}\; Q^*$
+              </div>
+            </foreignObject>
+          </svg>
+          <figcaption id="sutton-barto-caption"><span class="figure-number">Policy iteration (adapted from <a href="http://incompleteideas.net/book/the-book-2nd.html">Sutton &amp; Barto, 2018</a>, Chapter 4).</span> The left panel shows the evaluation ($\text{E}$) and improvement ($\text{I}$) loop between $\pi$ and $Q^\pi$. On the right, alternating between the two constraints $Q = Q^\pi$ and $\pi = \text{greedy}(Q)$ converges to $(\pi^*, Q^*)$, as unrolled in the sequence along the bottom.</figcaption>
+        </figure>
+        <p>In a batch-online round, the logged dataset $\mathcal{D}_k$ consists of on-policy trajectories collected under $\pi_k$. We can therefore estimate $Q^{\pi_k}$ offline from Monte Carlo returns on $\mathcal{D}_k$ and then run an offline policy improvement step to obtain $\pi_{k+1}$ for the next deployment.</p>
+      </section>
+
+      <section aria-labelledby="iterpo">
+        <h2 id="iterpo">Iterative Policy Optimization (IterPO)</h2>
+        <p>IterPO implements both steps of approximate policy iteration with standard single-turn RLHF tools. At turn $t$, an agent’s action $a_t$ is a complete natural-language response, so computing an exact greedy policy over the response space is intractable. Standard single-turn RLHF optimizers sidestep response-level maximization by operating at the token level, generating completions token by token and updating the policy from scalar sequence-level rewards.</p>
+
+        <div class="observation-box" role="note" aria-label="Observation 1: GRPO as an approximate policy improvement operator">
+          <p><span class="observation-head"><strong>Observation 1</strong> (GRPO as an approximate policy improvement operator).</span> Suppose we have access to the turn-level state-action value function $Q^\pi$ of a multi-turn policy $\pi$. Let $\mathtt{SingleTurnOpt}(Q^\pi)$ denote the idealized single-turn optimizer that maximizes expected $Q^\pi(s, a)$ at every state $s$, and set</p>
+          <div class="equation observation-eq">
+            $$\pi' = \mathtt{SingleTurnOpt}(Q^\pi).$$
+          </div>
+          <p>In practice, running a token-level, single-turn RLHF optimizer such as GRPO with $Q^\pi$ as its reward model approximates this idealized step for the response-level multi-turn problem. By Theorem 1 in the paper, any policy $\pi'$ that improves expected single-turn $Q^\pi$-value at every state $s$ also improves global multi-turn return from any initial state $s_1$:</p>
+          <div class="equation observation-eq">
+            $$\mathbb{E}_{a \sim \pi'(\cdot \mid s)}\bigl[Q^\pi(s, a)\bigr] \ge \mathbb{E}_{a \sim \pi(\cdot \mid s)}\bigl[Q^\pi(s, a)\bigr] \;\; \forall s \quad \Longrightarrow \quad V^{\pi'}(s_1) \ge V^\pi(s_1).$$
+          </div>
+          <p>Because $Q^\pi$ scores each candidate response directly, this update needs no rollouts of future turns.</p>
+        </div>
+
+        <figure class="paper-figure concept-figure" aria-labelledby="q-encap-caption">
+          <svg class="concept-svg" viewBox="0 0 860 206" role="img" aria-labelledby="q-encap-caption">
+            <defs>
+              <marker id="qe-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#495057"/>
+              </marker>
+              <marker id="qe-ah-faint" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#8b949e"/>
+              </marker>
+              <marker id="qe-ah-or" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#a67232"/>
+              </marker>
+            </defs>
+
+            <!-- Row 1: Multi-turn rollout with Q^\pi encapsulating future turns -->
+            <foreignObject x="8" y="38" width="176" height="58">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <div class="fo-row-title">Multi-turn horizon</div>
+                <div class="fo-row-sub">Future turns compressed</div>
+              </div>
+            </foreignObject>
+
+            <foreignObject x="196" y="49" width="36" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$s_t$</div>
+            </foreignObject>
+            <line x1="234" y1="67" x2="274" y2="67" class="c-line" marker-end="url(#qe-ah)"/>
+
+            <rect x="276" y="48" width="76" height="38" rx="4" class="c-node"/>
+            <foreignObject x="276" y="48" width="76" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">Policy $\pi'$</div>
+            </foreignObject>
+
+            <line x1="352" y1="67" x2="395" y2="67" class="c-line" marker-end="url(#qe-ah)"/>
+            <foreignObject x="352" y="41" width="44" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">$a_t$</div>
+            </foreignObject>
+
+            <!-- Encapsulating Q^\pi box wrapping all future User & Policy \pi turns -->
+            <rect x="398" y="10" width="454" height="94" rx="5" class="c-encap"/>
+            <foreignObject x="408" y="14" width="434" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-encap-title"><span>$Q^\pi(s_t, a_t)$&ensp;encapsulates future user and policy turns</span></div>
+            </foreignObject>
+
+            <g opacity="0.52">
+              <rect x="412" y="48" width="84" height="38" rx="4" class="c-node-soft"/>
+              <foreignObject x="412" y="48" width="84" height="38">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">User</div>
+              </foreignObject>
+
+              <line x1="496" y1="67" x2="534" y2="67" stroke="#8b949e" stroke-width="1.2" stroke-dasharray="2.5 2.5" marker-end="url(#qe-ah-faint)"/>
+              <foreignObject x="496" y="42" width="38" height="22">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label fo-edge-sub">$s_{t+1}$</div>
+              </foreignObject>
+
+              <rect x="536" y="48" width="76" height="38" rx="4" class="c-node-soft"/>
+              <foreignObject x="536" y="48" width="76" height="38">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">Policy $\pi$</div>
+              </foreignObject>
+
+              <line x1="612" y1="67" x2="650" y2="67" stroke="#8b949e" stroke-width="1.2" stroke-dasharray="2.5 2.5" marker-end="url(#qe-ah-faint)"/>
+              <foreignObject x="612" y="42" width="38" height="22">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label fo-edge-sub">$a_{t+1}$</div>
+              </foreignObject>
+
+              <rect x="652" y="48" width="84" height="38" rx="4" class="c-node-soft"/>
+              <foreignObject x="652" y="48" width="84" height="38">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">User</div>
+              </foreignObject>
+
+              <line x1="736" y1="67" x2="778" y2="67" stroke="#8b949e" stroke-width="1.2" stroke-dasharray="2.5 2.5" marker-end="url(#qe-ah-faint)"/>
+              <foreignObject x="780" y="49" width="56" height="36">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$\cdots R$</div>
+              </foreignObject>
+            </g>
+
+            <!-- Downward reduction arrow from encapsulating Q^\pi box to single-turn reward box -->
+            <line x1="474" y1="104" x2="474" y2="142" stroke="#a67232" stroke-width="1.35" stroke-dasharray="2.5 2.5" marker-end="url(#qe-ah-or)"/>
+            <foreignObject x="484" y="112" width="150" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left"><span class="fo-encap-sub">reduces to scalar reward</span></div>
+            </foreignObject>
+
+            <!-- Row 2: Equivalent Single-turn RL problem -->
+            <foreignObject x="8" y="138" width="176" height="54">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <div class="fo-row-title">Single-turn RL with $Q^\pi$</div>
+                <div class="fo-row-sub">IterPO policy improvement</div>
+              </div>
+            </foreignObject>
+
+            <foreignObject x="196" y="147" width="36" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">$s_t$</div>
+            </foreignObject>
+            <line x1="234" y1="165" x2="274" y2="165" class="c-line" marker-end="url(#qe-ah)"/>
+
+            <rect x="276" y="146" width="76" height="38" rx="4" class="c-node"/>
+            <foreignObject x="276" y="146" width="76" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center">Policy $\pi'$</div>
+            </foreignObject>
+
+            <line x1="352" y1="165" x2="395" y2="165" class="c-line" marker-end="url(#qe-ah)"/>
+            <foreignObject x="352" y="139" width="44" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-edge-label">$a_t$</div>
+            </foreignObject>
+
+            <rect x="398" y="146" width="152" height="38" rx="4" class="c-encap-solid"/>
+            <foreignObject x="398" y="146" width="152" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-encap-ink">Reward $Q^\pi(s_t, a_t)$</div>
+            </foreignObject>
+
+            <foreignObject x="566" y="146" width="280" height="38">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <span class="fo-note-muted">No user simulator needed during training</span>
+              </div>
+            </foreignObject>
+          </svg>
+          <figcaption id="q-encap-caption"><span class="figure-number">Encapsulating future turns inside $Q^\pi$.</span> Because $Q^\pi(s_t, a_t)$ predicts the expected return over all subsequent user and policy turns, policy improvement reduces to a standard single-turn RL problem with $Q^\pi$ as the reward model.</figcaption>
+        </figure>
+
+        <p>Observation 1 assumes access to $Q^\pi$, which we can estimate directly from the conversations logged under $\pi$. In a $T$-turn conversation ending with terminal reward $R$ and discount factor $\gamma \in [0, 1]$, for each turn $t \in \{1, \dots, T\}$, the logged state-action pair $(s_t, a_t)$ (conversation history and response) has observed Monte Carlo return $G_t = \gamma^{T-t} R$, an unbiased target for $Q^\pi(s, a) = \mathbb{E}_\pi[G_t \mid s_t = s,\, a_t = a]$.</p>
+
+        <div class="observation-box" role="note" aria-label="Observation 2: Reward modeling as policy evaluation">
+          <p><span class="observation-head"><strong>Observation 2</strong> (Reward modeling as policy evaluation).</span> Given a batch of on-policy trajectories collected under $\pi$, we form the supervised dataset $\mathcal{D}^\pi_{\mathrm{multi}} = \{((s_t, a_t), G_t)\}$ of logged state-action pairs and Monte Carlo returns. Fitting a reward model on $\mathcal{D}^\pi_{\mathrm{multi}}$ performs multi-turn policy evaluation as a standard single-turn reward-modeling problem:</p>
+          <div class="equation observation-eq">
+            $$Q^\pi \approx \mathtt{SingleTurnFitReward}(\mathcal{D}^\pi_{\mathrm{multi}}).$$
+          </div>
+          <p>Because the trajectories are on-policy under $\pi$, this estimate requires no temporal-difference (TD) learning or off-policy correction, which keeps policy evaluation simple when conversation horizons are moderate. For very long trajectories, pure Monte Carlo returns can have high variance, so TD-based evaluation (such as SARSA) may be preferable in that regime.</p>
+        </div>
+
+        <p>In each round of IterPO, we fit $Q^\pi$ to Monte Carlo returns from the logged conversations (Observation 2), hold $Q^\pi$ fixed as the reward model for single-turn, token-level GRPO on logged states $s_t$ to obtain $\pi'$ (Observation 1), and deploy $\pi'$ to collect the next batch. Alternating reward fitting and single-turn GRPO instantiates approximate policy iteration directly in IterPO’s single-turn operators.</p>
+
+        <figure class="paper-figure concept-figure" aria-labelledby="iterpo-pi-caption">
+          <svg id="iterpo-pi-fig" class="concept-svg" viewBox="0 0 860 258" role="img" aria-labelledby="iterpo-pi-caption">
+            <defs>
+              <marker id="ipi-ah-or" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#b57322"/>
+              </marker>
+              <marker id="ipi-ah-bl" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#285e8e"/>
+              </marker>
+              <marker id="ipi-ah-ink" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,1.8 L9,5 L0,8.2 z" fill="#3b434c"/>
+              </marker>
+            </defs>
+
+            <!-- Left: IterPO Evaluation (Reward Fitting) / Improvement (GRPO) Loop -->
+            <foreignObject x="150" y="14" width="60" height="34">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-math-lg fo-pi-bl">$\pi$</div>
+            </foreignObject>
+
+            <foreignObject x="150" y="152" width="60" height="36">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-math-lg fo-pi-or">$Q^\pi$</div>
+            </foreignObject>
+
+            <!-- Right arc: Reward Fitting (pi -> Q^pi) -->
+            <path id="ipi-arc-eval" d="M 196,46 C 238,70 238,132 196,156" fill="none" stroke="#b57322" stroke-width="1.65" marker-end="url(#ipi-ah-or)"/>
+            <foreignObject x="234" y="74" width="128" height="52">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-left">
+                <span class="fo-ipi-or">Reward Fitting</span>
+                <span class="fo-edge-sub">on MC returns $\mathcal{D}^\pi$</span>
+              </div>
+            </foreignObject>
+
+            <!-- Left arc: Single-Turn GRPO (Q^pi -> pi) -->
+            <path id="ipi-arc-imp" d="M 164,156 C 122,132 122,70 164,46" fill="none" stroke="#285e8e" stroke-width="1.65" marker-end="url(#ipi-ah-bl)"/>
+            <foreignObject x="4" y="74" width="122" height="52">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-right">
+                <span class="fo-ipi-bl">Single-Turn GRPO</span>
+                <span class="fo-edge-sub">with reward $Q^\pi$</span>
+              </div>
+            </foreignObject>
+
+            <!-- Subtle vertical divider -->
+            <line x1="370" y1="20" x2="370" y2="184" stroke="#e9ecef" stroke-width="1"/>
+
+            <!-- Right: Converging Wedge in IterPO Notation -->
+            <!-- Upper line: (432, 36) to (764, 102) -->
+            <line x1="432" y1="36" x2="764" y2="102" stroke="#285e8e" stroke-width="1.75"/>
+            <foreignObject x="506" y="10" width="186" height="28">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-bl">$\pi = \mathtt{GRPO}(Q)$</div>
+            </foreignObject>
+
+            <!-- Lower line: (432, 174) to (764, 102) -->
+            <line x1="432" y1="174" x2="764" y2="102" stroke="#b57322" stroke-width="1.75"/>
+            <foreignObject x="518" y="164" width="194" height="28">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-or">$Q = \mathtt{FitReward}(\mathcal{D}^\pi)$</div>
+            </foreignObject>
+
+            <!-- Animated Zig-Zag Steps (points collinear on the two lines) -->
+            <!-- Upper: x = 432 + 332u, y = 36 + 66u | Lower: x = 432 + 332u, y = 174 - 72u -->
+            <!-- P0(u=0.06): (451.9, 40.0) -->
+            <circle cx="451.9" cy="40.0" r="3" fill="#285e8e"/>
+            <foreignObject x="424" y="16" width="34" height="24">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-node-bl">$\pi_0$</div>
+            </foreignObject>
+
+            <!-- Step 1 (Eval): P0(451.9, 40.0) -> P1(u=0.19: 495.1, 160.3) -->
+            <line id="ipi-s0" x1="451.9" y1="40.0" x2="493.5" y2="155.8" stroke="#b57322" stroke-width="1.6" marker-end="url(#ipi-ah-or)"/>
+            <g id="ipi-l0">
+              <circle cx="495.1" cy="160.3" r="2.8" fill="#b57322"/>
+              <foreignObject x="378" y="88" width="88" height="24">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-col-right"><span class="fo-ipi-tag-or">Reward Fit</span></div>
+              </foreignObject>
+              <foreignObject x="476" y="164" width="38" height="24">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-node-or">$Q^{\pi_0}$</div>
+              </foreignObject>
+            </g>
+
+            <!-- Step 2 (GRPO): P1(495.1, 160.3) -> P2(u=0.36: 551.5, 59.8) -->
+            <line id="ipi-s1" x1="495.1" y1="160.3" x2="549.2" y2="63.9" stroke="#285e8e" stroke-width="1.6" marker-end="url(#ipi-ah-bl)"/>
+            <g id="ipi-l1">
+              <circle cx="551.5" cy="59.8" r="2.8" fill="#285e8e"/>
+              <foreignObject x="498" y="96" width="54" height="22">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center"><span class="fo-ipi-tag-bl fo-pill-bg">GRPO</span></div>
+              </foreignObject>
+              <foreignObject x="536" y="34" width="32" height="24">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-node-bl">$\pi_1$</div>
+              </foreignObject>
+            </g>
+
+            <!-- Step 3 (Eval): P2(551.5, 59.8) -> P3(u=0.51: 601.3, 137.3) -->
+            <line id="ipi-s2" x1="551.5" y1="59.8" x2="598.8" y2="133.4" stroke="#b57322" stroke-width="1.6" marker-end="url(#ipi-ah-or)"/>
+            <g id="ipi-l2">
+              <circle cx="601.3" cy="137.3" r="2.8" fill="#b57322"/>
+              <foreignObject x="586" y="140" width="36" height="24">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-node-or">$Q^{\pi_1}$</div>
+              </foreignObject>
+            </g>
+
+            <!-- Step 4 (GRPO): P3(601.3, 137.3) -> P4(u=0.65: 647.8, 78.9) -->
+            <line id="ipi-s3" x1="601.3" y1="137.3" x2="645.1" y2="82.3" stroke="#285e8e" stroke-width="1.6" marker-end="url(#ipi-ah-bl)"/>
+            <g id="ipi-l3">
+              <circle cx="647.8" cy="78.9" r="2.8" fill="#285e8e"/>
+              <foreignObject x="633" y="53" width="32" height="24">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-ipi-node-bl">$\pi_2$</div>
+              </foreignObject>
+            </g>
+
+            <!-- Step 5 (Eval): P4(647.8, 78.9) -> P5(u=0.77: 687.6, 118.6) -->
+            <line id="ipi-s4" x1="647.8" y1="78.9" x2="684.8" y2="115.8" stroke="#b57322" stroke-width="1.5" marker-end="url(#ipi-ah-or)"/>
+
+            <!-- Step 6 (GRPO): P5(687.6, 118.6) -> P6(u=0.87: 720.8, 93.4) -->
+            <line id="ipi-s5" x1="687.6" y1="118.6" x2="717.5" y2="95.9" stroke="#285e8e" stroke-width="1.5" marker-end="url(#ipi-ah-bl)"/>
+
+            <!-- Optimal point (pi*, Q*) -->
+            <g id="ipi-star">
+              <circle cx="764" cy="102" r="4.2" fill="#242a30"/>
+              <foreignObject x="772" y="86" width="66" height="32">
+                <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-sb-label">$(\pi^*, Q^*)$</div>
+              </foreignObject>
+            </g>
+
+            <!-- Bottom: Unrolled IterPO Sequence -->
+            <foreignObject x="10" y="210" width="840" height="40">
+              <div xmlns="http://www.w3.org/1999/xhtml" class="fo-center fo-pi-chain">
+                $\pi_0 \;\xrightarrow{\;\text{Reward Fit}\;}\; Q^{\pi_0} \;\xrightarrow{\;\text{GRPO}\;}\; \pi_1 \;\xrightarrow{\;\text{Reward Fit}\;}\; Q^{\pi_1} \;\xrightarrow{\;\text{GRPO}\;}\; \pi_2 \;\xrightarrow{\;\text{Reward Fit}\;}\; \cdots \;\xrightarrow{\;\text{GRPO}\;}\; \pi^* \;\xrightarrow{\;\text{Reward Fit}\;}\; Q^*$
+              </div>
+            </foreignObject>
+          </svg>
+          <figcaption id="iterpo-pi-caption"><span class="figure-number">IterPO as approximate policy iteration.</span> Each round alternates between fitting $Q^{\pi_k}$ on logged Monte Carlo returns (reward fitting) and updating the policy with single-turn GRPO against $Q^{\pi_k}$, driving $(\pi_k, Q^{\pi_k})$ toward $(\pi^*, Q^*)$.</figcaption>
+        </figure>
+
+        <p>Putting it all together, the overview diagram below shows how Observations 1 and 2 fit into one complete batch-online round of IterPO.</p>
+
+        <figure class="paper-figure" aria-labelledby="method-caption">
+          <svg id="fig" viewBox="0 0 1200 595" role="img" aria-labelledby="method-caption"></svg>
+          <noscript>
+            <img src="assets/igrpo.png" width="2400" height="1200" alt="The paper’s Iterative Policy Optimization diagram.">
+          </noscript>
+          <figcaption id="method-caption"><span class="figure-number">IterPO overview.</span> Policy evaluation (top) fits a turn-level $Q$-function $Q^\pi$ to Monte Carlo returns from logged conversations, and policy improvement (bottom) uses $Q^\pi$ as the reward model for single-turn GRPO. Deploying the updated policy $\pi'$ collects the next batch. <a href="assets/igrpo.pdf">Original figure (PDF)</a>.</figcaption>
+        </figure>
+      </section>
+
+      <section aria-labelledby="experiments">
+        <h2 id="experiments">Evaluation on Multi-Turn Negotiation</h2>
+        <p>We evaluate IterPO across six multi-turn negotiation environments adapted from existing bargaining datasets: Craigslist, Ultimatum, Deal or No Deal, CaSiNo, Job Interview, and Alliance Negotiation. Both agents are initialized from Qwen2.5-7B-Instruct, with the negotiation partner held fixed. We query the partner only during deployment data collection (four rounds of 400 conversations each, with discount $\gamma = 0.9$) and never during training.</p>
+
+        <figure class="paper-figure env-suite" aria-labelledby="env-suite-caption">
+          <div class="environment-grid">
+            <article class="env-card">
+              <h3>Craigslist</h3>
+              <p>A vendor and a customer bargain over the price of a listed item. The vendor sees only the listing price, while the customer also has a private target price.</p>
+            </article>
+
+            <article class="env-card">
+              <h3>Ultimatum</h3>
+              <p>A proposer and a responder negotiate how to split a fixed pool over multiple turns. The responder can accept, counter, or reject, and disagreement leaves both sides with zero.</p>
+            </article>
+
+            <article class="env-card">
+              <h3>Deal or No Deal</h3>
+              <p>Two agents divide a shared pool of books, hats, and balls. Each knows only its own per-item values and must negotiate a split that both sides accept.</p>
+            </article>
+
+            <article class="env-card">
+              <h3>CaSiNo</h3>
+              <p>Two campers divide three packages each of food, water, and firewood. Each has private high, medium, and low priorities over the three resources, so both can gain by trading across issues.</p>
+            </article>
+
+            <article class="env-card">
+              <h3>Job Interview</h3>
+              <p>A recruiter and a candidate negotiate five coupled terms (salary, holiday days, workplace, company, and position), and the chosen company also scales the value of the position.</p>
+            </article>
+
+            <article class="env-card">
+              <h3>Alliance Negotiation</h3>
+              <p>Two stakeholders negotiate a five-issue project deal, each with a private option-score matrix and a minimum acceptable utility threshold (BATNA).</p>
+            </article>
+          </div>
+          <figcaption id="env-suite-caption"><span class="figure-number">Evaluation environments.</span> Summary of the six multi-turn negotiation settings used in our experiments.</figcaption>
+        </figure>
+
+        <figure class="paper-figure" aria-labelledby="results-caption">
+          <a class="figure-link" href="assets/composite_expected_return.png" target="_blank" rel="noopener" aria-label="Open the paper’s deployment-round results at full resolution in a new tab">
+            <img src="assets/composite_expected_return.png" width="2400" height="1469" loading="lazy" alt="The paper’s six-panel plot of expected discounted return over deployment rounds zero through four. IterPO is shown in red, alongside ST-GRPO, MT-SFT, MT-KTO, MT-PPO, ArCHer, and ArCHer-LC.">
+          </a>
+          <figcaption id="results-caption"><span class="figure-number">Performance across deployment rounds.</span> Expected discounted return on training scenarios across rounds $0\text{–}4$ (mean $\pm$ 1 SE over three seeds). <a href="assets/composite_expected_return.pdf">Original figure (PDF)</a>.</figcaption>
+        </figure>
+
+        <p>IterPO improves over the base policy in all six environments and achieves the highest held-out discounted return in five of the six (MT-KTO leads on CaSiNo). MT-SFT and MT-PPO stay close to the base policy, while MT-KTO and ArCHer perform better but still trail IterPO on all environments except CaSiNo. The single-turn ablation ST-GRPO ($\gamma = 0$, which removes future-turn credit assignment) is within one standard error of IterPO on Craigslist, Ultimatum, and CaSiNo, but trails by 0.07 to 0.12 on Deal or No Deal, Job Interview, and Alliance.</p>
+
+        <figure class="paper-figure table-figure" aria-labelledby="table-caption">
+          <figcaption id="table-caption" class="table-caption"><span class="figure-number">Held-out evaluation across all six environments.</span> Qwen2.5-7B-Instruct · best in-training checkpoint · 100 held-out scenarios per environment · mean $\pm$ one standard error across three seeds.</figcaption>
+          <div class="table-scroll">
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Craigslist</th>
+                  <th>Ultimatum</th>
+                  <th>Deal or No Deal</th>
+                  <th>CaSiNo</th>
+                  <th>Job Interview</th>
+                  <th>Alliance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><th>Base</th><td>0.36</td><td>0.80</td><td>0.52</td><td>0.38</td><td>0.25</td><td>0.48</td></tr>
+                <tr><th>MT-SFT</th><td>0.41 ± .01</td><td>0.79 ± .01</td><td>0.50 ± .05</td><td>0.42 ± .01</td><td>0.25 ± .00</td><td>0.51 ± .02</td></tr>
+                <tr><th>MT-KTO</th><td>0.48 ± .01</td><td>0.86 ± .01</td><td>0.56 ± .00</td><td class="best-val">0.54 ± .01</td><td>0.29 ± .01</td><td>0.59 ± .00</td></tr>
+                <tr><th>MT-PPO</th><td>0.38 ± .02</td><td>0.78 ± .01</td><td>0.51 ± .03</td><td>0.38 ± .02</td><td>0.24 ± .01</td><td>0.51 ± .05</td></tr>
+                <tr><th>ArCHer</th><td>0.45 ± .01</td><td>0.91 ± .03</td><td>0.60 ± .03</td><td>0.53 ± .03</td><td>0.26 ± .01</td><td>0.57 ± .01</td></tr>
+                <tr><th>ArCHer-LC</th><td>0.38 ± .01</td><td>0.86 ± .02</td><td>0.53 ± .04</td><td>0.40 ± .04</td><td>0.25 ± .01</td><td>0.49 ± .06</td></tr>
+                <tr><th>ST-GRPO</th><td>0.54 ± .00</td><td>0.94 ± .05</td><td>0.58 ± .06</td><td>0.46 ± .03</td><td>0.28 ± .04</td><td>0.55 ± .02</td></tr>
+                <tr class="ours"><th>IterPO (I-GRPO)</th><td class="best-val">0.55 ± .01</td><td class="best-val">0.99 ± .00</td><td class="best-val">0.70 ± .01</td><td>0.45 ± .03</td><td class="best-val">0.35 ± .03</td><td class="best-val">0.65 ± .01</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </figure>
+
+        <p>Although IterPO trains only on sparse terminal rewards, logged transcripts show that trained policies ask for the partner’s priorities earlier and propose complete agreements sooner across rounds. In multi-issue settings such as Deal or No Deal and Job Interview, they also reveal their own private valuations less often and trade concessions on lower-value items for gains on higher-value ones (<em>logrolling</em>).</p>
+
+        <figure class="paper-figure transcript-figure" aria-labelledby="transcript-caption">
+          <div class="transcript-box">
+            <div class="transcript-header">
+              <span>Deal or No Deal · Qwen2.5-7B-Instruct (IterPO Round 4)</span>
+              <span>Pool: 3 books, 1 hat, 2 balls · Agent values: (2, 0, 2) · Partner values: (0, 6, 2)</span>
+            </div>
+            <div class="transcript-body">
+              <div class="dialogue-turn">
+                <span>Turn 0 [Agent]</span>
+                <p>Hello! We need to divide some items between us: 3 books, 1 hat, 2 balls. What items are you most interested in?</p>
+              </div>
+              <div class="dialogue-turn">
+                <span>Turn 1 [Partner]</span>
+                <p>I value the hat the most, so I would prefer to keep it. I also value the balls pretty high, so I'd like to get at least one ball. Books have the lowest value for me, so I'd be okay with not getting any books if it means I can get the hat and at least one ball.</p>
+              </div>
+              <div class="dialogue-turn">
+                <span>Turn 2 [Agent]</span>
+                <p>Based on what you've said, it sounds like you value the hat and balls highly and are okay with not getting any books. Given my values, I would be happy to keep the books and one ball. Here is my proposal: <code>\boxed{AGREED: MINE: book=3 hat=0 ball=1; THEIRS: book=0 hat=1 ball=1}</code></p>
+              </div>
+              <div class="dialogue-turn terminal">
+                <span>Turn 3 [Partner]</span>
+                <p>That sounds fair based on our preferences. I accept this proposal. <code>\boxed{ACCEPT}</code></p>
+              </div>
+            </div>
+          </div>
+          <figcaption id="transcript-caption"><span class="figure-number">Sample negotiation transcript from the paper.</span> In Round 4 on Deal or No Deal, the trained agent asks for its partner’s priorities, trades away the hat (worth $0$ to the agent, $6$ to the partner) for all $3$ books and $1$ ball, and closes an optimal split (utility $8$ for both parties) in four turns.</figcaption>
+        </figure>
+      </section>
+
+      <section class="citation" aria-labelledby="citation">
+        <h2 id="citation">Citation</h2>
+        <pre tabindex="0" aria-label="BibTeX citation"><code id="bibtex">@inproceedings{jiang-etal:neurips26,
+  title     = {Iterative Policy Optimization: Batch-Online Multi-Turn RL via Single-Turn RL},
+  author    = {Daniel R. Jiang and Ankur Samanta and Yukai Yang and
+               Jalaj Bhandari and Rémi Munos and Tyler Lu},
+  booktitle = {Advances in Neural Information Processing Systems 39 (NeurIPS-2026)},
+  year      = {2026},
+  url       = {https://arxiv.org/abs/2511.21638}
+}</code></pre>
+      </section>
+
+      <footer>
+        <a href="https://arxiv.org/abs/2511.21638">Iterative Policy Optimization</a>
+        <span>Research by Meta, FAIR at Meta, and Columbia University.</span>
+      </footer>
+    </article>
+  </main>
+</body>
+</html>
