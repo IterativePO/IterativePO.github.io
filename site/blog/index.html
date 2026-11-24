@@ -281,11 +281,7 @@
           <div class="equation observation-eq">
             $$\pi' = \mathtt{SingleTurnOpt}(Q^\pi).$$
           </div>
-          <p>In practice, running a token-level, single-turn RLHF optimizer such as GRPO with $Q^\pi$ as its reward model approximates this idealized step for the response-level multi-turn problem. By Theorem 1 in the paper, any policy $\pi'$ that improves expected single-turn <span class="math-nowrap">$Q^\pi$-value</span> at every state $s$ also improves global multi-turn return from any initial state <span class="math-nowrap">$s_1$:</span></p>
-          <div class="equation observation-eq">
-            $$\mathbb{E}_{a \sim \pi'(\cdot \mid s)}\bigl[Q^\pi(s, a)\bigr] \ge \mathbb{E}_{a \sim \pi(\cdot \mid s)}\bigl[Q^\pi(s, a)\bigr] \;\; \forall s \quad \Longrightarrow \quad V^{\pi'}(s_1) \ge V^\pi(s_1).$$
-          </div>
-          <p>Because $Q^\pi$ scores each candidate response directly, this update needs no rollouts of future turns.</p>
+          <p>In practice, running a token-level, single-turn RLHF optimizer such as GRPO with $Q^\pi$ as its reward model approximates this idealized step for the response-level multi-turn problem. By Theorem 1 in the paper, any updated policy $\pi'$ that achieves higher expected <span class="math-nowrap">$Q^\pi$-value</span> than $\pi$ at every conversation state is guaranteed to achieve higher multi-turn return from any initial state. Because $Q^\pi$ scores each candidate response directly, this update needs no rollouts of future turns.</p>
         </div>
 
         <figure class="paper-figure concept-figure" aria-labelledby="q-encap-caption">
