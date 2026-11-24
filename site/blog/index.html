@@ -399,12 +399,12 @@
               <!-- Right arc: Reward Fitting (pi -> Q^pi) -->
               <path id="ipi-arc-eval" d="M 196,46 C 238,70 238,132 196,156" fill="none" stroke="#b57322" stroke-width="1.65" marker-end="url(#ipi-ah-or)"/>
               <text x="236" y="96" class="svg-ipi-or">Reward Fitting</text>
-              <g class="svg-tex" data-math="on MC returns $\mathcal{D}^\pi$" data-x="236" data-y="112" data-size="11.5" data-align="left" data-color="#626b74"></g>
+              <g class="svg-tex" data-math="$\mathtt{SingleTurnFitReward}$" data-x="236" data-y="112" data-size="10.5" data-align="left" data-color="#626b74" data-max-w="130"></g>
 
               <!-- Left arc: Single-Turn GRPO (Q^pi -> pi) -->
               <path id="ipi-arc-imp" d="M 164,156 C 122,132 122,70 164,46" fill="none" stroke="#285e8e" stroke-width="1.65" marker-end="url(#ipi-ah-bl)"/>
               <text x="124" y="96" text-anchor="end" class="svg-ipi-bl">Single-Turn GRPO</text>
-              <g class="svg-tex" data-math="with reward $Q^\pi$" data-x="124" data-y="112" data-size="11.5" data-align="right" data-color="#626b74"></g>
+              <g class="svg-tex" data-math="$\approx \mathtt{SingleTurnOpt}(Q^\pi)$" data-x="124" data-y="112" data-size="10.5" data-align="right" data-color="#626b74" data-max-w="120"></g>
 
               <!-- Subtle vertical divider -->
               <line x1="370" y1="20" x2="370" y2="184" stroke="#e9ecef" stroke-width="1"/>
@@ -412,11 +412,11 @@
               <!-- Right: Converging Wedge in IterPO Notation -->
               <!-- Upper line: (432, 36) to (764, 102) -->
               <line x1="432" y1="36" x2="764" y2="102" stroke="#285e8e" stroke-width="1.75"/>
-              <g class="svg-tex" data-math="$\pi = \mathtt{GRPO}(Q)$" data-x="599" data-y="24" data-size="13" data-color="#285e8e"></g>
+              <g class="svg-tex" data-math="$\pi = \mathtt{GRPO}(Q) \approx \mathtt{SingleTurnOpt}(Q)$" data-x="648" data-y="22" data-size="12.2" data-color="#285e8e" data-max-w="360"></g>
 
               <!-- Lower line: (432, 174) to (764, 102) -->
               <line x1="432" y1="174" x2="764" y2="102" stroke="#b57322" stroke-width="1.75"/>
-              <g class="svg-tex" data-math="$Q = \mathtt{FitReward}(\mathcal{D}^\pi)$" data-x="615" data-y="178" data-size="13" data-color="#a66212"></g>
+              <g class="svg-tex" data-math="$Q = \mathtt{SingleTurnFitReward}(\mathcal{D}^\pi_{\mathrm{multi}})$" data-x="682" data-y="180" data-size="12.2" data-color="#a66212" data-max-w="310"></g>
 
               <!-- Animated Zig-Zag Steps (points collinear on the two lines) -->
               <!-- Upper: x = 432 + 332u, y = 36 + 66u | Lower: x = 432 + 332u, y = 174 - 72u -->
@@ -472,7 +472,7 @@
             </svg>
           </div>
           </div>
-          <figcaption id="iterpo-pi-caption"><span class="figure-number">IterPO as approximate policy iteration.</span> Each round alternates between fitting $Q^{\pi_k}$ on logged Monte Carlo returns (reward fitting) and updating the policy with single-turn GRPO against <span class="math-nowrap">$Q^{\pi_k}$,</span> driving $(\pi_k, Q^{\pi_k})$ toward <span class="math-nowrap">$(\pi^*, Q^*)$.</span></figcaption>
+          <figcaption id="iterpo-pi-caption"><span class="figure-number">IterPO as approximate policy iteration.</span> Each round alternates between fitting $Q^{\pi_k}$ via $\mathtt{SingleTurnFitReward}(\mathcal{D}^{\pi_k}_{\mathrm{multi}})$ on logged Monte Carlo returns and updating the policy with single-turn GRPO <span class="math-nowrap">($\mathtt{GRPO}(Q) \approx \mathtt{SingleTurnOpt}(Q)$),</span> driving $(\pi_k, Q^{\pi_k})$ toward <span class="math-nowrap">$(\pi^*, Q^*)$.</span></figcaption>
         </figure>
 
         <p>Putting it all together, the overview diagram below shows how Observations 1 and 2 fit into one complete batch-online round of IterPO.</p>
