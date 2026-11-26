@@ -262,8 +262,11 @@
     layers.ghosts.setAttribute('clip-path', 'url(#coneClip)');
 
     /* Background panels (top panel bottom is y = 252) */
-    el('rect', { x: 24, y: 18, width: 1007, height: 234, rx: 18, class: 'panel' }, layers.panels);
-    el('rect', { x: 24, y: 268, width: 556, height: 232, rx: 18, class: 'panel' }, layers.panels);
+    const topPanelGroup = el('g', {}, layers.panels);
+    el('rect', { x: 24, y: 18, width: 1007, height: 234, rx: 18, class: 'panel' }, topPanelGroup);
+
+    const botPanelGroup = el('g', {}, layers.panels);
+    el('rect', { x: 24, y: 268, width: 556, height: 232, rx: 18, class: 'panel' }, botPanelGroup);
 
     /* Orange cone: top edge stays below y = 308 so the caption at y = 264..304 has clean clearance below top gray box (y = 252) */
     const cone = el('path', {
@@ -271,35 +274,40 @@
       fill: 'url(#coneG)'
     }, layers.cone);
 
-    /* Top panel labels */
-    makeSvgMath(layers.text, {
+    /* Top panel labels (grouped inside topPanelTextGroup so they appear with top panel) */
+    const topPanelTextGroup = el('g', {}, layers.text);
+    makeSvgMath(topPanelTextGroup, {
       x: 42, y: 42, size: 16, align: 'left', valign: 'middle', color: '#1f2428', maxW: 970,
       math: '**Learn multi-turn $Q^\\pi$:** Collect trajectories from $\\pi$ and regress on Monte Carlo returns to fit $Q^\\pi$.'
     });
 
     [['Turn 1', 504], ['Turn 2', 648], ['Turn 3', 792], ['Turn 4', 936]]
       .forEach(([label, x]) => {
-        const text = el('text', { x, y: 224, 'text-anchor': 'middle', 'font-size': 13.5 }, layers.text);
+        const text = el('text', { x, y: 224, 'text-anchor': 'middle', 'font-size': 13.5 }, topPanelTextGroup);
         text.textContent = label;
       });
 
     /* Native SVG token legend: (■ = token) centered at x = 504 */
-    const tokOpen = el('text', { x: 472, y: 243, 'text-anchor': 'end', 'font-size': 12.5 }, layers.text);
+    const tokOpen = el('text', { x: 472, y: 243, 'text-anchor': 'end', 'font-size': 12.5 }, topPanelTextGroup);
     tokOpen.textContent = '(';
-    el('rect', { x: 475, y: 234, width: 9, height: 9, rx: 1, class: 'tok' }, layers.text);
-    const tokClose = el('text', { x: 488, y: 243, 'text-anchor': 'start', 'font-size': 12.5 }, layers.text);
+    el('rect', { x: 475, y: 234, width: 9, height: 9, rx: 1, class: 'tok' }, topPanelTextGroup);
+    const tokClose = el('text', { x: 488, y: 243, 'text-anchor': 'start', 'font-size': 12.5 }, topPanelTextGroup);
     tokClose.textContent = '= token)';
 
-    /* Bottom-left panel labels */
-    makeSvgMath(layers.text, {
+    /* Bottom-left panel header */
+    const botPanelTextGroup = el('g', {}, layers.text);
+    makeSvgMath(botPanelTextGroup, {
       x: 42, y: 294, size: 15.5, align: 'left', valign: 'middle', color: '#1f2428', maxW: 520,
       math: '**Single-turn GRPO:** Run (token-level) GRPO with $Q^\\pi$ as the reward.'
     });
+
     const responseLabel = el('text', { x: 360, y: 344, 'text-anchor': 'middle', 'font-size': 12.5 }, layers.text);
     responseLabel.textContent = 'Single-turn response';
-    const grpoLabel = el('text', { x: 360, y: 426, 'text-anchor': 'middle', 'font-size': 16, 'font-weight': 700 }, layers.text);
+
+    const grpoReturnGroup = el('g', {}, layers.text);
+    const grpoLabel = el('text', { x: 360, y: 426, 'text-anchor': 'middle', 'font-size': 16, 'font-weight': 700 }, grpoReturnGroup);
     grpoLabel.textContent = 'GRPO';
-    const estimatedLabel = el('text', { x: 360, y: 482, 'text-anchor': 'middle', 'font-size': 12.5 }, layers.text);
+    const estimatedLabel = el('text', { x: 360, y: 482, 'text-anchor': 'middle', 'font-size': 12.5 }, grpoReturnGroup);
     estimatedLabel.textContent = 'Estimated multi-turn return';
 
     /* Cone & Repeat labels */
@@ -371,7 +379,7 @@
       }
     };
 
-    /* Model boxes */
+    /* Model boxes (each in its own group for piece-by-piece reveal) */
     // 1. Q^\pi-model box: y = 90..182 (center y = 136), x = 42..272
     const qModelGroup = el('g', {}, layers.boxes);
     el('rect', { x: 42, y: 90, width: 230, height: 92, rx: 14, class: 'orbox' }, qModelGroup);
@@ -382,14 +390,16 @@
     makeStaticNetwork(qModelGroup, 182, 136, 'or');
 
     // 2. LLM box: y = 347..437 (center y = 392), x = 42..248
-    el('rect', { x: 42, y: 347, width: 206, height: 90, rx: 14, class: 'blbox' }, layers.boxes);
-    const llmText = el('text', { x: 93, y: 401, 'text-anchor': 'middle', 'font-size': 25, 'font-weight': 500, class: 'bl-ink' }, layers.text);
+    const llmGroup = el('g', {}, layers.boxes);
+    el('rect', { x: 42, y: 347, width: 206, height: 90, rx: 14, class: 'blbox' }, llmGroup);
+    const llmText = el('text', { x: 93, y: 401, 'text-anchor': 'middle', 'font-size': 25, 'font-weight': 500, class: 'bl-ink' }, llmGroup);
     llmText.textContent = 'LLM';
-    makeStaticNetwork(layers.boxes, 154, 392, 'bl');
+    makeStaticNetwork(llmGroup, 154, 392, 'bl');
 
     // 3. Q^\pi reward box: y = 334..450 (center y = 392), x = 480..546
-    el('rect', { x: 480, y: 334, width: 66, height: 116, rx: 10, class: 'orbox' }, layers.boxes);
-    makeSvgMath(layers.text, {
+    const qScorerGroup = el('g', {}, layers.boxes);
+    el('rect', { x: 480, y: 334, width: 66, height: 116, rx: 10, class: 'orbox' }, qScorerGroup);
+    makeSvgMath(qScorerGroup, {
       x: 513, y: 392, size: 24, align: 'center', valign: 'middle', color: '#dd8418', maxW: 56,
       math: '$Q^\\pi$'
     });
@@ -499,76 +509,106 @@
       });
     });
 
-    /* Synchronized 10.5-second loop */
-    const DURATION = 10.5;
-    const HIT_TIME = 3.75; // Exact moment the single-turn response arrow hits Q^\pi
+    /* Piece-by-piece 13-second build loop (each box appears sequentially, holds full figure, resets smoothly) */
+    const DURATION = 13.0;
+    const HIT_TIME = 5.15; // Exact moment the single-turn response arrow hits Q^\pi
 
     const render = (t) => {
-      /* 1. Top Panel: First collect conversations (t = 0.0 .. 1.45), then arrows feed into Q^pi-model (t = 1.5 .. 3.0) */
+      const fadeAll = 1 - ease(seg(t, 12.2, 12.9));
+
+      /* Piece 1 (0.05..1.85s): Top gray panel + Episodes 1–3 roll out */
+      const topVis = easeOut(seg(t, 0.05, 0.45)) * fadeAll;
+      setOp(topPanelGroup, topVis);
+      setOp(topPanelTextGroup, topVis);
+
       episodeViews.forEach((episode, epIdx) => {
-        const start = 0.1 + epIdx * 0.2;
+        const epTrackVis = easeOut(seg(t, 0.28 + epIdx * 0.16, 0.58 + epIdx * 0.16)) * fadeAll;
+        setOp(episode.g, epTrackVis);
+        const start = 0.38 + epIdx * 0.18;
         episode.cells.forEach((cell, cellIdx) => {
-          const appear = ease(seg(t, start + cellIdx * 0.04, start + cellIdx * 0.04 + 0.26));
+          const appear = ease(seg(t, start + cellIdx * 0.038, start + cellIdx * 0.038 + 0.24));
           setOp(cell.r, appear);
           if (cell.term) {
-            setOp(cell.tx, ease(seg(t, 1.0, 1.38)));
+            setOp(cell.tx, ease(seg(t, 1.25, 1.6)));
           }
         });
 
-        const arrowAppear = ease(seg(t, 1.5 + epIdx * 0.08, 1.82 + epIdx * 0.08));
-        setOp(paths['episode' + epIdx].el, arrowAppear);
-        setActive('episode' + epIdx, t >= 1.5 + epIdx * 0.08 && t < 2.95);
+        /* Piece 2 (1.85..2.85s): Arrows feed into Q^\pi-model box */
+        const arrowVis = easeOut(seg(t, 1.85 + epIdx * 0.08, 2.18 + epIdx * 0.08)) * fadeAll;
+        setOp(paths['episode' + epIdx].el, arrowVis);
+        setActive('episode' + epIdx, t >= 1.85 + epIdx * 0.08 && t < 3.15);
       });
 
-      setOp(qModelGroup, lerp(0.45, 1, ease(seg(t, 1.7, 2.2))));
+      const qModelVis = easeOut(seg(t, 2.15, 2.7)) * fadeAll;
+      setOp(qModelGroup, qModelVis);
 
-      /* 2. Bottom-Left Panel: LLM generates single-turn response -> arrow strikes Q^pi at HIT_TIME */
-      setOp(paths.toResp.el, lerp(0.25, 1, easeOut(seg(t, 2.95, 3.15))));
-      setActive('toResp', t >= 2.95 && t < 3.65);
+      /* Piece 3 (3.15..4.25s): Bottom-left gray panel -> LLM box -> Q^\pi reward box */
+      const botPanelVis = easeOut(seg(t, 3.15, 3.6)) * fadeAll;
+      setOp(botPanelGroup, botPanelVis);
+      setOp(botPanelTextGroup, botPanelVis);
+
+      const llmVis = easeOut(seg(t, 3.5, 3.95)) * fadeAll;
+      setOp(llmGroup, llmVis);
+
+      const qScorerVis = easeOut(seg(t, 3.85, 4.25)) * fadeAll;
+      setOp(qScorerGroup, qScorerVis);
+
+      /* Piece 4 (4.30..5.15s): Single-turn response -> arrow strikes Q^\pi at HIT_TIME */
+      const toRespVis = easeOut(seg(t, 4.30, 4.55)) * fadeAll;
+      setOp(paths.toResp.el, toRespVis);
+      setActive('toResp', t >= 4.30 && t < 5.0);
+      setOp(responseLabel, easeOut(seg(t, 4.38, 4.65)) * fadeAll);
 
       responseTokens.forEach((tok, idx) => {
-        const tokAppear = easeOut(seg(t, 3.08 + idx * 0.12, 3.32 + idx * 0.12));
-        setOp(tok, lerp(0.18, 1, tokAppear));
+        const tokAppear = easeOut(seg(t, 4.45 + idx * 0.11, 4.68 + idx * 0.11));
+        setOp(tok, tokAppear * fadeAll);
       });
-      setOp(respDots, lerp(0.18, 1, easeOut(seg(t, 3.2, 3.44))));
+      setOp(respDots, easeOut(seg(t, 4.56, 4.78)) * fadeAll);
 
-      // Arrow from single-turn response to Q^pi fires at t = 3.55 and hits Q^pi at HIT_TIME = 3.75
-      setOp(paths.toQ.el, lerp(0.25, 1, easeOut(seg(t, 3.55, HIT_TIME))));
-      setActive('toQ', t >= 3.55 && t < 6.2);
+      const toQVis = easeOut(seg(t, 4.92, HIT_TIME)) * fadeAll;
+      setOp(paths.toQ.el, toQVis);
+      setActive('toQ', t >= 4.92 && t < 6.65);
 
-      /* 3. Cone: Immediately fans out from Q^pi at HIT_TIME = 3.75 using easeOut (peak initial velocity) */
+      /* Piece 5 (5.15..6.5s): Immediate orange fan-out from Q^\pi (stays visible once assembled) */
       const fanOut = easeOut(seg(t, HIT_TIME, HIT_TIME + 0.55));
-      const fanFade = 1 - ease(seg(t, 6.7, 7.5));
-      const coneOp = fanOut * fanFade;
-
-      const clipW = Math.round(530 * easeOut(seg(t, HIT_TIME, HIT_TIME + 0.78)));
+      const clipW = Math.round(530 * easeOut(seg(t, HIT_TIME, HIT_TIME + 0.8)));
       if (coneClipRect._w !== clipW) {
         coneClipRect._w = clipW;
         coneClipRect.setAttribute('width', clipW);
       }
 
-      setOp(cone, coneOp);
-      setOp(coneTextGroup, easeOut(seg(t, HIT_TIME, HIT_TIME + 0.45)) * fanFade);
+      setOp(cone, fanOut * fadeAll);
+      setOp(coneTextGroup, easeOut(seg(t, HIT_TIME, HIT_TIME + 0.45)) * fadeAll);
 
       ghostTurns.forEach((item) => {
         const start = HIT_TIME + item.depth * 0.22 + item.branch * 0.03;
         const appear = easeOut(seg(t, start, start + 0.32));
-        setOp(item.el, appear * fanFade);
+        setOp(item.el, appear * fadeAll);
       });
 
-      /* 4. Estimated multi-turn return flows back -> LLM \pi' -> Repeat */
-      setActive('return', t >= 6.1 && t < 7.6);
-      setActive('improve', t >= 7.3 && t < 8.8);
+      /* Piece 6 (6.65..7.55s): GRPO + Estimated multi-turn return arrow */
+      const returnVis = easeOut(seg(t, 6.65, 7.15)) * fadeAll;
+      setOp(paths.return.el, returnVis);
+      setOp(grpoReturnGroup, returnVis);
+      setActive('return', t >= 6.65 && t < 7.85);
 
-      const improvedVis = t < 7.3 ? 0.5 : lerp(0.5, 1, ease(seg(t, 7.3, 7.8)));
+      /* Piece 7 (7.85..8.85s): Improvement arrow + LLM \pi' (improved) box */
+      const improveArrowVis = easeOut(seg(t, 7.85, 8.25)) * fadeAll;
+      setOp(paths.improve.el, improveArrowVis);
+      setActive('improve', t >= 7.85 && t < 9.05);
+
+      const improvedVis = easeOut(seg(t, 8.15, 8.75)) * fadeAll;
       setOp(improvedGroup, improvedVis);
 
-      setActive('repeat', t >= 8.7);
-      setOp(repeatTextGroup, t >= 8.7 ? 1 : 0.7);
+      /* Piece 8 (9.0..9.8s): Repeat \pi \leftarrow \pi' loop arrow + label */
+      const repeatVis = easeOut(seg(t, 9.0, 9.5)) * fadeAll;
+      setOp(paths.repeat.el, repeatVis);
+      setOp(repeatTextGroup, easeOut(seg(t, 9.15, 9.65)) * fadeAll);
+      setActive('repeat', t >= 9.0 && t < 10.6);
     };
 
     if (reducedMotion) {
-      render(5.4);
+      render(10.8);
     } else {
       let lastTimestamp = performance.now();
       let playhead = 0;

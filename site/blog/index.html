@@ -48,7 +48,7 @@
       }
     };
   </script>
-  <script src="script.js?v=6" defer></script>
+  <script src="script.js?v=7" defer></script>
   <script id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-svg.js" defer></script>
 </head>
 <body>
@@ -475,7 +475,7 @@
           <figcaption id="iterpo-pi-caption"><span class="figure-number">IterPO as approximate policy iteration.</span> Each round alternates between fitting $Q^{\pi_k}$ via $\mathtt{SingleTurnFitReward}(\mathcal{D}^{\pi_k}_{\mathrm{multi}})$ on logged Monte Carlo returns and updating the policy with single-turn GRPO <span class="math-nowrap">($\mathtt{GRPO}(Q) \approx \mathtt{SingleTurnOpt}(Q)$),</span> driving $(\pi_k, Q^{\pi_k})$ toward <span class="math-nowrap">$(\pi^*, Q^*)$.</span></figcaption>
         </figure>
 
-        <p>Putting it all together, the overview diagram below shows how Observations 1 and 2 fit into one complete batch-online round of IterPO.</p>
+        <p>Here is another figure from the paper that illustrates the same algorithm in a different way, showing the logged trajectories, the single-turn GRPO update, and how future turns are compressed inside $Q^\pi$.</p>
 
         <figure class="paper-figure" aria-labelledby="method-caption">
           <div class="svg-scroll-wrap">
